@@ -148,7 +148,13 @@ const App: React.FC = () => {
        if (realm) {
           // Tính phần thưởng
           const stoneReward = Math.floor(Math.random() * 50 * (realm.id + 1)) + 50;
-          const ironReward = Math.floor(Math.random() * 5 * (realm.id + 1)) + 3;
+
+          // Drop Equipment Logic
+          let droppedItem: Item | null = null;
+          // 20% chance to get equipment (tỉ lệ 20% tổng thể cho các loại trang bị)
+          if (Math.random() < 0.2) {
+              droppedItem = generateEquipment(realm.minRealmIdx);
+          }
 
           setPlayer(prev => {
              const newInv = [...prev.inventory];
@@ -156,16 +162,22 @@ const App: React.FC = () => {
              const stoneIdx = newInv.findIndex(i => i.id === 'spirit_stone');
              if (stoneIdx > -1) newInv[stoneIdx].count += stoneReward;
              else newInv.push({ ...POSSIBLE_ITEMS[0], count: stoneReward });
-
-             // Add iron
-             const ironIdx = newInv.findIndex(i => i.id === 'black_iron');
-             if (ironIdx > -1) newInv[ironIdx].count += ironReward;
-             else newInv.push({ ...POSSIBLE_ITEMS[1], count: ironReward });
              
+             // Add equipment if dropped
+             if (droppedItem) {
+                 newInv.push({ ...droppedItem, count: 1 });
+             }
+
              return { ...prev, inventory: newInv };
           });
           
-          addLog(`Thám hiểm [${realm.name}] hoàn tất! Nhận ${stoneReward} Linh Thạch, ${ironReward} Hắc Thiết.`, 'success');
+          let msg = `Thám hiểm [${realm.name}] hoàn tất! Nhận ${stoneReward} Linh Thạch`;
+          if (droppedItem) {
+             msg += `, nhận được [${droppedItem.name}]`;
+          }
+          msg += `.`;
+
+          addLog(msg, 'success');
           savePlayerData();
        }
        setExploringRealmId(null);
@@ -244,7 +256,7 @@ const App: React.FC = () => {
       <header className="h-16 bg-void-800 border-b border-void-700 flex items-center justify-center relative px-4 shadow-xl z-30 shrink-0">
         <div className="absolute left-4 flex gap-2 items-center"><div className="p-2 bg-void-700/50 rounded-full border border-gold-500/20 hidden sm:block"><CanvasIcon type="crown" size={24} color="#ffd700"/></div><div className="text-[10px] flex flex-col text-gray-400"><span className="font-bold text-gold-400">{player.name}</span><span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> Ping: {serverLatency}ms</span></div></div>
         <h1 className="text-xl md:text-3xl font-bold text-gold-400 uppercase tracking-[0.2em] text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">TU TIÊN VÔ CỰC</h1>
-        <div className="absolute right-2"><button onClick={() => setShowSettings(!showSettings)} className="w-10 h-10 rounded-full bg-void-700 border border-void-600 hover:bg-void-600 flex items-center justify-center shadow-lg transition-all active:scale-95"><CanvasIcon type="settings" size={20} color="#9ca3af" /></button>{showSettings && (<div className="absolute top-12 right-0 bg-void-800 border border-void-600 rounded-lg shadow-2xl w-48 py-2 z-50 animate-fadeIn overflow-hidden"><button onClick={toggleSound} className="w-full text-left px-4 py-3 hover:bg-void-700 flex items-center gap-3 transition-colors border-b border-void-700/50"><CanvasIcon type={isSoundEnabled ? 'sound_on' : 'sound_off'} size={18} color={isSoundEnabled ? '#4ade80' : '#9ca3af'} /><span className={isSoundEnabled ? 'text-green-400' : 'text-gray-400'}>Âm Thanh: {isSoundEnabled ? 'Bật' : 'Tắt'}</span></button><button onClick={onResetClick} className="w-full text-left px-4 py-3 hover:bg-red-900/20 flex items-center gap-3 transition-colors border-b border-void-700/50 group"><CanvasIcon type="trash" size={18} color="#ef4444" /><span className="text-red-400 group-hover:text-red-300">Trùng Sinh (Reset)</span></button><button onClick={onLogoutClick} className="w-full text-left px-4 py-3 hover:bg-void-700 flex items-center gap-3 transition-colors group"><CanvasIcon type="logout" size={18} color="#facc15" /><span className="text-gray-300 group-hover:text-white">Đăng Xuất</span></button></div>)}</div>
+        <div className="absolute right-2"><button onClick={() => setShowSettings(!showSettings)} className="w-10 h-10 rounded-full bg-void-700 border border-void-600 hover:bg-void-600 flex items-center justify-center shadow-lg transition-all active:scale-95"><CanvasIcon type="settings" size={20} color="#9ca3af" /></button>{showSettings && (<div className="absolute top-12 right-0 bg-void-800 border border-void-600 rounded-lg shadow-2xl w-48 py-2 z-50 animate-fadeIn overflow-hidden"><button onClick={toggleSound} className="w-full text-left px-4 py-3 hover:bg-void-700 flex items-center gap-3 transition-colors border-b border-void-700/50"><CanvasIcon type={isSoundEnabled ? 'sound_on' : 'sound_off'} size={18} color={isSoundEnabled ? '#4ade80' : '#9ca3af'} /><span className="text-green-400" : 'text-gray-400'}>Âm Thanh: {isSoundEnabled ? 'Bật' : 'Tắt'}</span></button><button onClick={onResetClick} className="w-full text-left px-4 py-3 hover:bg-red-900/20 flex items-center gap-3 transition-colors border-b border-void-700/50 group"><CanvasIcon type="trash" size={18} color="#ef4444" /><span className="text-red-400 group-hover:text-red-300">Trùng Sinh (Reset)</span></button><button onClick={onLogoutClick} className="w-full text-left px-4 py-3 hover:bg-void-700 flex items-center gap-3 transition-colors group"><CanvasIcon type="logout" size={18} color="#facc15" /><span className="text-gray-300 group-hover:text-white">Đăng Xuất</span></button></div>)}</div>
       </header>
       {confirmModal && (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fadeIn"><div className="bg-void-800 border-2 border-void-600 rounded-xl shadow-2xl max-w-sm w-full p-6 text-center"><h3 className="text-xl font-bold text-gold-400 mb-4 uppercase">{confirmModal.title}</h3><p className="text-gray-300 mb-6">{confirmModal.message}</p><div className="grid grid-cols-2 gap-4"><button onClick={() => setConfirmModal(null)} className="py-2 rounded border border-void-600 hover:bg-void-700 text-gray-400">Từ Chối</button><button onClick={confirmModal.onConfirm} className="py-2 rounded bg-red-600 hover:bg-red-500 text-white font-bold shadow-lg">Xác Nhận</button></div></div></div>)}
       <main className="flex-1 p-2 md:p-4 flex flex-col lg:flex-row gap-4 max-w-7xl mx-auto w-full overflow-hidden">
