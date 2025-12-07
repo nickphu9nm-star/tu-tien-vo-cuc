@@ -60,35 +60,16 @@ const App: React.FC = () => {
   const handleLogout = () => { if (player.username) localStorage.setItem(USER_KEY_PREFIX + player.username, JSON.stringify(player)); localStorage.removeItem('ttvc_current_user'); setAuthStatus(AuthStatus.LOGGED_OUT); setPlayer(INITIAL_PLAYER_STATE); setUsernameInput(''); setPasswordInput(''); };
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'normal') => { const newLog: LogEntry = { id: `log-${Date.now()}-${logCounter.current++}`, message, type, timestamp: new Date().toLocaleTimeString(), }; setLogs(prev => [...prev, newLog].slice(-50)); }, []);
 
-  // Exploration Finish Logic
+  // --- Exploration Logic Fix ---
   const finishExploration = useCallback(() => {
     if (exploringRealmId === null) return;
     const realm = SECRET_REALMS.find(r => r.id === exploringRealmId);
     if (!realm) return;
 
-    setExploringRealmId(null); // Reset ID to stop loop
-    setExplorationTimer(0);    // Reset Timer
+    setExploringRealmId(null); 
+    setExplorationTimer(0);
 
-    // Reward Logic
     const stoneReward = Math.floor(Math.random() * 50) + (realm.id * 10);
-    let itemReward: Item | null = null;
-    
-    // Simple drop logic based on realm ID
-    if (Math.random() * 100 < realm.dropRate) {
-        // Higher realms drop better gear
-        let rarity = ItemRarity.GREY;
-        if (realm.id >= 3) rarity = ItemRarity.GREEN;
-        if (realm.id >= 5) rarity = ItemRarity.BLUE;
-        if (realm.id >= 7) rarity = ItemRarity.PURPLE;
-        if (realm.id >= 8) rarity = ItemRarity.GOLD;
-        // Chance for +1 rarity
-        if (Math.random() < 0.2 && rarity !== ItemRarity.RED) {
-             // Logic to upgrade rarity enum is complex, keep simple for now
-        }
-        // Actually generate item (requires constants import)
-        // For now just give stones and log
-    }
-
     setPlayer(prev => {
         const newInv = [...prev.inventory];
         const stoneIdx = newInv.findIndex(i => i.id === 'spirit_stone');
@@ -100,38 +81,65 @@ const App: React.FC = () => {
     addLog(`Thám hiểm [${realm.name}] hoàn tất! Nhận được ${stoneReward} Linh Thạch.`, 'success');
   }, [exploringRealmId, addLog]);
 
-  useEffect(() => { if (authStatus !== AuthStatus.LOGGED_IN) return; const simInterval = setInterval(() => { if (Math.random() < 0.15) { const npc = NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)]; const msg = NPC_MESSAGES[Math.floor(Math.random() * NPC_MESSAGES.length)]; setWorldChatMessages(prev => [...prev, { id: `chat_${Date.now()}`, sender: npc, content: msg, isSystem: false, timestamp: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) }].slice(-50)); } if (Math.random() < 0.2) { setMarketListings(prev => { const myItems = prev.filter(i => i.sellerId === player.username); if (myItems.length > 0 && Math.random() < 0.3) { const itemToBuy = myItems[Math.floor(Math.random() * myItems.length)]; setTimeout(() => { setPlayer(p => { const newInv = [...p.inventory]; const stoneIdx = newInv.findIndex(i => i.id === 'spirit_stone'); if(stoneIdx > -1) newInv[stoneIdx].count += itemToBuy.price; else newInv.push({ ...POSSIBLE_ITEMS[0], count: itemToBuy.price }); return { ...p, inventory: newInv }; }); addLog(`[Sàn Giao Dịch] ${NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)]} đã mua [${itemToBuy.item.name}] của bạn với giá ${itemToBuy.price} Linh Thạch!`, 'success'); }, 0); return prev.filter(i => i.id !== itemToBuy.id); } return prev; }); } }, 2000); return () => clearInterval(simInterval); }, [authStatus, player.username]);
+  // Watch for timer end
+  useEffect(() => {
+    if (exploringRealmId !== null && explorationTimer === 0) {
+        // Delay slightly to ensure UI renders 0:00 before finishing
+        const timer = setTimeout(() => {
+            finishExploration();
+        }, 500);
+        return () => clearTimeout(timer);
+    }
+  }, [exploringRealmId, explorationTimer, finishExploration]);
+
+  // --- ONLINE SIMULATION ---
+  useEffect(() => {
+      if (authStatus !== AuthStatus.LOGGED_IN) return;
+      const simInterval = setInterval(() => {
+          if (Math.random() < 0.15) { const npc = NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)]; const msg = NPC_MESSAGES[Math.floor(Math.random() * NPC_MESSAGES.length)]; setWorldChatMessages(prev => [...prev, { id: `chat_${Date.now()}`, sender: npc, content: msg, isSystem: false, timestamp: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) }].slice(-50)); }
+          if (Math.random() < 0.2) { 
+              setMarketListings(prev => {
+                  const myItems = prev.filter(i => i.sellerId === player.username);
+                  if (myItems.length > 0 && Math.random() < 0.3) {
+                      const itemToBuy = myItems[Math.floor(Math.random() * myItems.length)];
+                      setTimeout(() => {
+                          setPlayer(p => { const newInv = [...p.inventory]; const stoneIdx = newInv.findIndex(i => i.id === 'spirit_stone'); if(stoneIdx > -1) newInv[stoneIdx].count += itemToBuy.price; else newInv.push({ ...POSSIBLE_ITEMS[0], count: itemToBuy.price }); return { ...p, inventory: newInv }; });
+                          addLog(`[Sàn Giao Dịch] ${NPC_NAMES[Math.floor(Math.random() * NPC_NAMES.length)]} đã mua [${itemToBuy.item.name}] của bạn với giá ${itemToBuy.price} Linh Thạch!`, 'success');
+                      }, 0);
+                      return prev.filter(i => i.id !== itemToBuy.id);
+                  }
+                  return prev;
+              });
+          }
+      }, 2000); return () => clearInterval(simInterval);
+  }, [authStatus, player.username]);
+
   useEffect(() => { if(marketListings.length > 0) localStorage.setItem(SERVER_KEY_MARKET, JSON.stringify(marketListings)); }, [marketListings]);
-  
-  // Game Loop
-  useEffect(() => { 
-    if (authStatus !== AuthStatus.LOGGED_IN) return; 
-    const interval = setInterval(() => { 
-      setNow(Date.now()); 
-      setBossCooldown(prev => prev > 0 ? prev - 1 : 0); 
-      setServerLatency(Math.floor(Math.random() * 20) + 30); 
-      
-      setPlayer(prev => { 
-        if (now % 5000 < 100 && prev.username) localStorage.setItem(USER_KEY_PREFIX + prev.username, JSON.stringify(prev)); 
-        if (prev.qi >= prev.maxQi) return prev; 
-        let speed = prev.stats.speed; 
-        (Object.values(prev.equipment) as Item[]).forEach(item => { if(item?.stats?.speed) { const enhanceMult = 1 + ((item.enhancementLevel || 0) * 0.1); speed += parseFloat((item.stats!.speed! * enhanceMult).toFixed(2)); } }); 
-        return { ...prev, qi: Math.min(prev.maxQi, prev.qi + speed) }; 
-      }); 
-      
-      // Exploration Logic Fix
-      if (exploringRealmId !== null) {
-          setExplorationTimer(prev => {
-              if (prev <= 1) {
-                  finishExploration(); // Call finish when timer hits 0
-                  return 0;
-              }
-              return prev - 1;
-          });
+
+  // --- Main Game Loop ---
+  useEffect(() => {
+    if (authStatus !== AuthStatus.LOGGED_IN) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+      setBossCooldown(prev => prev > 0 ? prev - 1 : 0);
+      setServerLatency(Math.floor(Math.random() * 20) + 30);
+
+      // Auto save
+      setPlayer(prev => {
+        if (now % 5000 < 100 && prev.username) localStorage.setItem(USER_KEY_PREFIX + prev.username, JSON.stringify(prev));
+        if (prev.qi >= prev.maxQi) return prev;
+        let speed = prev.stats.speed;
+        (Object.values(prev.equipment) as Item[]).forEach(item => { if(item?.stats?.speed) { const enhanceMult = 1 + ((item.enhancementLevel || 0) * 0.1); speed += parseFloat((item.stats!.speed! * enhanceMult).toFixed(2)); } });
+        return { ...prev, qi: Math.min(prev.maxQi, prev.qi + speed) };
+      });
+
+      // Exploration Timer Decrement
+      if (exploringRealmId !== null && explorationTimer > 0) {
+          setExplorationTimer(prev => prev - 1);
       }
-    }, TICK_RATE_MS); 
-    return () => clearInterval(interval); 
-  }, [authStatus, exploringRealmId, now, finishExploration]);
+    }, TICK_RATE_MS);
+    return () => clearInterval(interval);
+  }, [authStatus, exploringRealmId, explorationTimer, now]);
 
   const totalStats = useMemo((): PlayerStats => { const current = { ...player.stats, breakthroughChance: 0 }; let hpPercent = 0, atkPercent = 0, defPercent = 0; (Object.values(player.equipment) as Item[]).forEach(item => { if (item && item.stats) { const enhanceMult = 1 + ((item.enhancementLevel || 0) * 0.1); if (item.stats.hp) current.hp += Math.floor(item.stats.hp * enhanceMult); if (item.stats.atk) current.atk += Math.floor(item.stats.atk * enhanceMult); if (item.stats.def) current.def += Math.floor(item.stats.def * enhanceMult); if (item.stats.speed) current.speed += parseFloat((item.stats.speed! * enhanceMult).toFixed(2)); if (item.stats.breakthroughChance) current.breakthroughChance! += item.stats.breakthroughChance * enhanceMult; if (item.stats.hpPercent) hpPercent += Math.floor(item.stats.hpPercent * enhanceMult); if (item.stats.atkPercent) atkPercent += Math.floor(item.stats.atkPercent * enhanceMult); if (item.stats.defPercent) defPercent += Math.floor(item.stats.defPercent * enhanceMult); } }); current.hp = Math.floor(current.hp * (1 + hpPercent / 100)); current.atk = Math.floor(current.atk * (1 + atkPercent / 100)); current.def = Math.floor(current.def * (1 + defPercent / 100)); return current; }, [player.stats, player.equipment]);
   const combatPower = useMemo(() => totalStats.hp + (totalStats.atk * 3) + (totalStats.def * 3), [totalStats]);
